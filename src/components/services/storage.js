@@ -1,22 +1,37 @@
-// src/components/services/storage.js
-// Guarda la API key de Claude en el teléfono (SecureStore y, como respaldo, un archivo privado de la app)
+
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
 
-const CLAUDE_KEY = 'diacorks_claude_api_key';
-const KEY_FILE = FileSystem.documentDirectory + 'claude_key.txt';
+// ==========================================
+// DIAcorks - OPENROUTER STORAGE
+// ==========================================
 
-export const saveClaudeKey = async (key) => {
+const OPENROUTER_KEY = 'diacorks_openrouter_api_key';
+
+const KEY_FILE =
+  FileSystem.documentDirectory + 'openrouter_key.txt';
+
+// ==========================================
+// GUARDAR API KEY
+// ==========================================
+
+export const saveOpenRouterKey = async (key) => {
+  if (typeof key !== 'string' || !key.trim()) {
+    throw new Error('La API Key de OpenRouter no puede estar vacía.');
+  }
+
   const clean = key.trim();
   let saved = false;
 
+  // Almacenamiento seguro
   try {
-    await SecureStore.setItemAsync(CLAUDE_KEY, clean);
+    await SecureStore.setItemAsync(OPENROUTER_KEY, clean);
     saved = true;
   } catch (e) {
     console.log('SecureStore falló:', e);
   }
 
+  // Archivo privado como respaldo
   try {
     await FileSystem.writeAsStringAsync(KEY_FILE, clean);
     saved = true;
@@ -24,27 +39,72 @@ export const saveClaudeKey = async (key) => {
     console.log('Archivo de clave falló:', e);
   }
 
-  if (!saved) throw new Error('No se pudo guardar la clave en el teléfono.');
+  if (!saved) {
+    throw new Error(
+      'No se pudo guardar la API Key de OpenRouter en el teléfono.'
+    );
+  }
 };
 
-export const getClaudeKey = async () => {
-  try {
-    const k = await SecureStore.getItemAsync(CLAUDE_KEY);
-    if (k) return k;
-  } catch (e) {}
+// ==========================================
+// OBTENER API KEY
+// ==========================================
 
+export const getOpenRouterKey = async () => {
+  // Primero intenta SecureStore
+  try {
+    const key = await SecureStore.getItemAsync(OPENROUTER_KEY);
+
+    if (key) return key;
+  } catch (e) {
+    console.log('Error leyendo SecureStore:', e);
+  }
+
+  // Después intenta el archivo privado
   try {
     const info = await FileSystem.getInfoAsync(KEY_FILE);
+
     if (info.exists) {
-      const k = (await FileSystem.readAsStringAsync(KEY_FILE)).trim();
-      if (k) return k;
+      const key = (
+        await FileSystem.readAsStringAsync(KEY_FILE)
+      ).trim();
+
+      if (key) return key;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('Error leyendo archivo de respaldo:', e);
+  }
 
   return null;
 };
 
-export const deleteClaudeKey = async () => {
-  try { await SecureStore.deleteItemAsync(CLAUDE_KEY); } catch (e) {}
-  try { await FileSystem.deleteAsync(KEY_FILE, { idempotent: true }); } catch (e) {}
+// ==========================================
+// ELIMINAR API KEY
+// ==========================================
+
+export const deleteOpenRouterKey = async () => {
+  try {
+    await SecureStore.deleteItemAsync(OPENROUTER_KEY);
+  } catch (e) {
+    console.log('Error eliminando SecureStore:', e);
+  }
+
+  try {
+    await FileSystem.deleteAsync(KEY_FILE, {
+      idempotent: true,
+    });
+  } catch (e) {
+    console.log('Error eliminando archivo:', e);
+  }
 };
+
+// ==========================================
+// COMPATIBILIDAD CON CÓDIGO ANTERIOR
+// ==========================================
+
+// Permite que componentes antiguos que utilizan Claude
+// sigan funcionando mientras actualizas el resto del proyecto.
+
+export const saveClaudeKey = saveOpenRouterKey;
+export const getClaudeKey = getOpenRouterKey;
+export const deleteClaudeKey = deleteOpenRouterKey;
