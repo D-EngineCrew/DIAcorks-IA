@@ -1,0 +1,18 @@
+{
+  "expo": {
+    "name": "DIAcorks",
+    "slug": "diacorks",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "dark",
+    "android": {
+      "package": "com.dfpmprojects.DIAcorks",
+      "googleServicesFile": "./google-services.json",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#121212"
+      }
+    }
+  }
+}

@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "868221483912",
+    "project_id": "diacorks",
+    "storage_bucket": "diacorks.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:868221483912:android:e07b6acd9dacc2a7fe183d",
+        "android_client_info": {
+          "package_name": "com.dfpmprojects.DIAcorks"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDsmIxvDyG02U46a7K645xc64b3dnUBOXc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
