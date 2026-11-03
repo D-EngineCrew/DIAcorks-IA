@@ -18,15 +18,25 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
   }, [visible]);
 
   const save = async () => {
-    if (!key.trim().startsWith('sk-')) {
+    const clean = key.trim();
+    if (!clean.startsWith('sk-')) {
       setMessage('La clave debe empezar con "sk-". Cópiala completa desde tu cuenta de Anthropic.');
       return;
     }
-    await saveClaudeKey(key);
-    setHasKey(true);
-    setKey('');
-    setMessage('Clave guardada en este teléfono.');
-    onKeyChanged && onKeyChanged(true);
+    try {
+      await saveClaudeKey(clean);
+      const back = await getClaudeKey();
+      if (back !== clean) {
+        setMessage('No se pudo verificar la clave guardada. Inténtalo otra vez.');
+        return;
+      }
+      setHasKey(true);
+      setKey('');
+      setMessage('Clave guardada en este teléfono.');
+      onKeyChanged && onKeyChanged(true);
+    } catch (e) {
+      setMessage('Error al guardar: ' + (e.message || e));
+    }
   };
 
   const remove = async () => {
@@ -54,7 +64,7 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
             autoCapitalize="none"
             autoCorrect={false}
           />
-          <Text style={styles.hint}>La clave se guarda cifrada solo en este teléfono. No se sube a GitHub.</Text>
+          <Text style={styles.hint}>La clave se guarda solo en este teléfono. No se sube a GitHub.</Text>
 
           {message ? <Text style={styles.message}>{message}</Text> : null}
 
