@@ -20,6 +20,8 @@ const IMAGE_MODEL = 'gemini-2.5-flash-image';
 const TTS_MODEL = 'gemini-3.1-flash-tts-preview';
 const VOICE_NAME = 'Kore';
 
+const errText = (e) => String((e && e.message) || e).replace(/\s+/g, ' ').slice(0, 280);
+
 let imageModel = null;
 let ttsModel = null;
 
@@ -55,7 +57,7 @@ export const generateImage = async (prompt) => {
     return { uri: `data:${mimeType};base64,${data}` };
   } catch (error) {
     console.log('Error generando imagen:', error);
-    return { error: 'No se pudo generar la imagen. Revisa tu conexión y que el modelo esté activo en Firebase.' };
+    return { error: `No se pudo generar la imagen.\nDetalle: ${errText(error)}` };
   }
 };
 
@@ -96,7 +98,7 @@ export const speak = async (text) => {
     return { ok: true };
   } catch (error) {
     console.log('Error generando voz:', error);
-    return { error: 'No se pudo generar la voz. Revisa tu conexión y que el modelo esté activo en Firebase.' };
+    return { error: `No se pudo generar la voz.\nDetalle: ${errText(error)}` };
   }
 };
 
