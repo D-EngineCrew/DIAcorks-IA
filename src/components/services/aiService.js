@@ -1,72 +1,258 @@
+
 // src/components/services/aiService.js
-// Chat de texto con la API de Claude (usa fetch, no necesita SDK)
+// DIAcorks - OpenRouter AI Service
+// Conexión mediante Fetch API, sin SDK adicional.
+
 import { fileToContentBlocks } from './utils/fileHandler';
 import { getClaudeKey } from './storage';
 
-// ⚠️ Pega aquí tu API key de Claude (sk-ant-...). Si la dejas así, la app usa la que guardes en Menú → Configuración.
-// Ojo: quien vea tu repo o abra el APK podría usar esta clave. Mantén el repo privado.
-const CLAUDE_API_KEY = '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';
+// ==========================================
+// CONFIGURACIÓN DE OPENROUTER
+// ==========================================
 
-const API_URL = 'https://api.anthropic.com/v1/messages';
-const MODEL = 'claude-sonnet-5-5'; // más barato y rápido: 'claude-haiku-5-5'
+const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
+
+// Modelo predeterminado.
+// Puedes cambiarlo por cualquier modelo disponible en OpenRouter.
+const MODEL = 'openai/gpt-4o-mini';
+
 const MAX_TOKENS = 2048;
 
-const SYSTEM_PROMPT =
-  'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa.';
+const SYSTEM_PROMPT = `
+Eres DIAcorks IA, un asistente inteligente y programador.
+
+Tu función es ayudar con:
+
+- Programación y desarrollo de software.
+- Creación de mods y ports de videojuegos.
+- Desarrollo de aplicaciones Android y APK.
+- Desarrollo web (HTML, CSS, JavaScript).
+- Código Lua, Haxe, HScript y otros lenguajes.
+- Análisis y modificación de archivos.
+- Depuración y solución de errores.
+- Explicaciones técnicas y asistencia general.
+
+Responde principalmente en español.
+Proporciona código completo cuando el usuario lo solicite.
+Explica los cambios realizados de forma clara.
+No inventes resultados de ejecución.
+Mantén un tono profesional, directo y amigable.
+
+Tu nombre es DIAcorks.
+`;
+
+// ==========================================
+// API KEY
+// ==========================================
+
+// Por compatibilidad, reutilizamos el almacenamiento anterior.
+// Puedes cambiar getClaudeKey por getOpenRouterKey cuando
+// actualices también tu archivo storage.js.
 
 const getKey = async () => {
-  if (CLAUDE_API_KEY && CLAUDE_API_KEY !== 'TU_API_KEY_DE_CLAUDE') return CLAUDE_API_KEY;
-  return getClaudeKey();
+  return await getOpenRouterKey();
 };
 
-export const hasClaudeKey = async () => !!(await getKey());
+export const hasOpenRouterKey = async () => {
+  return !!(await getKey());
+};
+
+// Compatibilidad con componentes que todavía utilizan
+// el nombre anterior.
+export const hasClaudeKey = hasOpenRouterKey;
+
+// ==========================================
+// CONVERSIÓN DE ARCHIVOS
+// ==========================================
+
+const convertContentBlocks = (blocks = []) => {
+  return blocks.map((block) => {
+    if (block.type === 'text') {
+      return {
+        type: 'text',
+        text: block.text || '',
+      };
+    }
+
+    if (block.type === 'image') {
+      return {
+        type: 'image_url',
+        image_url: {
+          url: block.source?.data
+            ? `data:${block.source.media_type};base64,${block.source.data}`
+            : block.source?.url || '',
+        },
+      };
+    }
+
+    return null;
+  }).filter(Boolean);
+};
+
+// ==========================================
+// RESPUESTA DE DIAcorks
+// ==========================================
 
 /**
- * @param {string} prompt  Texto del usuario
- * @param {object|null} fileData  Resultado de pickAndReadFile() (opcional)
- * @param {Array} history  [{ role: 'user'|'assistant', content: '...' }] (opcional)
- * @returns {Promise<{ text: string, isError?: boolean }>}
+ * @param {string} prompt
+ * @param {object|null} fileData
+ * @param {Array} history
+ * @returns {Promise<{text: string, isError?: boolean}>}
  */
-export const fetchAIResponse = async (prompt, fileData = null, history = []) => {
+
+export const fetchAIResponse = async (
+  prompt,
+  fileData = null,
+  history = []
+) => {
+
   const apiKey = await getKey();
+
   if (!apiKey) {
-    return { text: 'Falta tu API key de Claude. Ábrela en Menú → Configuración.', isError: true };
+    return {
+      text: 'Falta tu API Key de OpenRouter. Configúrala en Menú → Configuración.',
+      isError: true,
+    };
   }
 
   try {
-    const content = [...fileToContentBlocks(fileData), { type: 'text', text: prompt }];
+
+    const fileBlocks = convertContentBlocks(
+      fileToContentBlocks(fileData)
+    );
+
+    const userContent = [
+      ...fileBlocks,
+      {
+        type: 'text',
+        text: prompt,
+      },
+    ];
+
+    const messages = [
+      {
+        role: 'system',
+        content: SYSTEM_PROMPT,
+      },
+
+      ...history
+        .filter((message) =>
+          ['user', 'assistant'].includes(message.role)
+        )
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        })),
+
+      {
+        role: 'user',
+        content: userContent,
+      },
+    ];
 
     const response = await fetch(API_URL, {
       method: 'POST',
+
       headers: {
-        'content-type': 'application/json',
-        'x-api-key': apiKey,
-        'anthropic-version': '2023-06-01',
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${apiKey}`,
+        'X-OpenRouter-Title': 'DIAcorks',
       },
+
       body: JSON.stringify({
         model: MODEL,
         max_tokens: MAX_TOKENS,
-        system: SYSTEM_PROMPT,
-        messages: [...history, { role: 'user', content }],
+        messages,
       }),
     });
 
     const data = await response.json();
 
+    // ======================================
+    // MANEJO DE ERRORES
+    // ======================================
+
     if (!response.ok) {
-      console.log('Error de Claude:', data);
-      if (response.status === 401) return { text: 'API key inválida. Revisa tu clave en Menú → Configuración.', isError: true };
-      if (response.status === 429) return { text: 'Demasiadas peticiones. Espera un momento e inténtalo de nuevo.', isError: true };
-      return { text: `Error de la API: ${data?.error?.message || response.status}`, isError: true };
+
+      console.error('Error de OpenRouter:', data);
+
+      if (response.status === 401) {
+        return {
+          text: 'API Key inválida. Revisa tu clave de OpenRouter.',
+          isError: true,
+        };
+      }
+
+      if (response.status === 402) {
+        return {
+          text: 'No hay saldo o créditos suficientes para esta solicitud.',
+          isError: true,
+        };
+      }
+
+      if (response.status === 403) {
+        return {
+          text: 'Solicitud rechazada. Comprueba los permisos de tu API Key o el modelo seleccionado.',
+          isError: true,
+        };
+      }
+
+      if (response.status === 404) {
+        return {
+          text: 'El modelo seleccionado no está disponible.',
+          isError: true,
+        };
+      }
+
+      if (response.status === 429) {
+        return {
+          text: 'Demasiadas solicitudes. Espera un momento e inténtalo nuevamente.',
+          isError: true,
+        };
+      }
+
+      return {
+        text: `Error de OpenRouter: ${
+          data?.error?.message || response.status
+        }`,
+        isError: true,
+      };
     }
 
-    const text = data.content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text)
-      .join('\n');
-    return { text: text || '(Claude no devolvió texto)' };
+    // ======================================
+    // EXTRAER RESPUESTA
+    // ======================================
+
+    const text =
+      data?.choices?.[0]?.message?.content;
+
+    if (typeof text === 'string' && text.trim()) {
+      return { text: text.trim() };
+    }
+
+    if (Array.isArray(text)) {
+      const result = text
+        .filter((item) => item.type === 'text')
+        .map((item) => item.text)
+        .join('\n');
+
+      if (result.trim()) {
+        return { text: result.trim() };
+      }
+    }
+
+    return {
+      text: '(DIAcorks no recibió una respuesta de texto.)',
+      isError: true,
+    };
+
   } catch (error) {
-    console.log(error);
-    return { text: 'Error de conexión. Revisa tu internet.', isError: true };
+
+    console.error('Error de DIAcorks:', error);
+
+    return {
+      text: 'Error de conexión con OpenRouter. Revisa tu conexión a internet e inténtalo nuevamente.',
+      isError: true,
+    };
   }
 };
