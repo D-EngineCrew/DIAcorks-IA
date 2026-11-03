@@ -1,7 +1,7 @@
 // src/components/Menu.js
 // Menú lateral que se desliza desde la izquierda
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, Pressable, Animated, StyleSheet, Platform, StatusBar } from 'react-native';
+import { View, Text, TouchableOpacity, Pressable, Animated, StyleSheet, Platform, StatusBar, BackHandler, AppState } from 'react-native';
 import { colors, radius } from '../theme';
 
 const PANEL_W = 300;
@@ -18,65 +18,88 @@ export default function Menu({ visible, onClose, mode, onChangeMode, onNewChat, 
   const [mounted, setMounted] = useState(visible);
 
   useEffect(() => {
+    let timer;
     if (visible) {
       setMounted(true);
       Animated.timing(x, { toValue: 0, duration: 220, useNativeDriver: true }).start();
     } else {
       Animated.timing(x, { toValue: -PANEL_W, duration: 180, useNativeDriver: true }).start(() => setMounted(false));
+      // Respaldo: si la animación no termina (por ejemplo al salir de la app), se desmonta igual
+      timer = setTimeout(() => setMounted(false), 300);
     }
+    return () => clearTimeout(timer);
+  }, [visible]);
+
+  // Botón "atrás" del teléfono cierra el menú
+  useEffect(() => {
+    if (!visible) return undefined;
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      onClose();
+      return true;
+    });
+    return () => sub.remove();
+  }, [visible]);
+
+  // Al volver a la app, si el menú debe estar cerrado, nunca se queda tapando la pantalla
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active' && !visible) {
+        x.setValue(-PANEL_W);
+        setMounted(false);
+      }
+    });
+    return () => sub.remove();
   }, [visible]);
 
   if (!mounted) return null;
 
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <View style={styles.root}>
-        <Animated.View style={[styles.panel, { transform: [{ translateX: x }] }]}>
-          <View style={styles.brand}>
-            <View style={styles.logo}>
-              <Text style={styles.logoText}>D</Text>
-            </View>
-            <View>
-              <Text style={styles.brandName}>DIAcorks IA</Text>
-              <Text style={styles.brandSub}>Claude + Gemini</Text>
-            </View>
+    <View style={styles.root}>
+      <Animated.View style={[styles.panel, { transform: [{ translateX: x }] }]}>
+        <View style={styles.brand}>
+          <View style={styles.logo}>
+            <Text style={styles.logoText}>D</Text>
           </View>
+          <View>
+            <Text style={styles.brandName}>DIAcorks IA</Text>
+            <Text style={styles.brandSub}>Claude + Gemini</Text>
+          </View>
+        </View>
 
-          <TouchableOpacity style={styles.newChat} onPress={() => { onNewChat(); onClose(); }}>
-            <Text style={styles.newChatText}>＋  Nuevo chat</Text>
-          </TouchableOpacity>
+        <TouchableOpacity style={styles.newChat} onPress={() => { onNewChat(); onClose(); }}>
+          <Text style={styles.newChatText}>＋  Nuevo chat</Text>
+        </TouchableOpacity>
 
-          <Text style={styles.section}>Modo</Text>
-          {MODES.map((m) => {
-            const active = m.id === mode;
-            return (
-              <TouchableOpacity
-                key={m.id}
-                style={[styles.mode, active && styles.modeActive]}
-                onPress={() => { onChangeMode(m.id); onClose(); }}
-              >
-                <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>{m.title}</Text>
-                <Text style={styles.modeDesc}>{m.desc}</Text>
-              </TouchableOpacity>
-            );
-          })}
+        <Text style={styles.section}>Modo</Text>
+        {MODES.map((m) => {
+          const active = m.id === mode;
+          return (
+            <TouchableOpacity
+              key={m.id}
+              style={[styles.mode, active && styles.modeActive]}
+              onPress={() => { onChangeMode(m.id); onClose(); }}
+            >
+              <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>{m.title}</Text>
+              <Text style={styles.modeDesc}>{m.desc}</Text>
+            </TouchableOpacity>
+          );
+        })}
 
-          <View style={{ flex: 1 }} />
+        <View style={{ flex: 1 }} />
 
-          <TouchableOpacity style={styles.item} onPress={() => { onClose(); onOpenSettings(); }}>
-            <Text style={styles.itemText}>⚙️  Configuración</Text>
-          </TouchableOpacity>
-          <Text style={styles.version}>DIAcorks v1.0.0 · DF-PM Projects</Text>
-        </Animated.View>
+        <TouchableOpacity style={styles.item} onPress={() => { onClose(); onOpenSettings(); }}>
+          <Text style={styles.itemText}>⚙️  Configuración</Text>
+        </TouchableOpacity>
+        <Text style={styles.version}>DIAcorks v1.0.0 · DF-PM Projects</Text>
+      </Animated.View>
 
-        <Pressable style={styles.overlay} onPress={onClose} />
-      </View>
-    </Modal>
+      <Pressable style={styles.overlay} onPress={onClose} />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, flexDirection: 'row' },
+  root: { ...StyleSheet.absoluteFillObject, flexDirection: 'row', zIndex: 10, elevation: 10 },
   overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)' },
   panel: {
     width: PANEL_W,
