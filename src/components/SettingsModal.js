@@ -7,12 +7,12 @@ import {
 import { colors, radius } from '../theme';
 import { getMemoryNotes, saveMemoryNotes } from './services/storage';
 import {
-  isModelReady, downloadModel, cancelDownload, deleteModel, MODEL_SIZE_TEXT,
+  MODELS, getDownloadedMap, downloadModel, cancelDownload, deleteModel,
 } from './services/localModel';
 
-export default function SettingsModal({ visible, onClose, onKeyChanged }) {
-  const [ready, setReady] = useState(false);
-  const [downloading, setDownloading] = useState(false);
+export default function SettingsModal({ visible, onClose, onKeyChanged, selectedId }) {
+  const [downloaded, setDownloaded] = useState({});
+  const [downloadingId, setDownloadingId] = useState(null);
   const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
   const [notes, setNotes] = useState('');
@@ -22,37 +22,41 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
     if (visible) {
       setMessage('');
       setNotesMessage('');
-      isModelReady().then(setReady);
+      getDownloadedMap().then(setDownloaded);
       getMemoryNotes().then(setNotes);
     }
   }, [visible]);
 
-  const download = async () => {
-    setDownloading(true);
+  const nameOf = (id) => (MODELS.find((m) => m.id === id) || {}).name || id;
+
+  const download = async (id) => {
+    if (downloadingId) return;
+    setDownloadingId(id);
     setProgress(0);
-    setMessage('Descargando el modelo… no cierres la app.');
+    setMessage(`Descargando ${nameOf(id)}… no cierres la app.`);
     try {
-      await downloadModel(setProgress);
-      setReady(true);
-      setMessage('Modelo listo. Ya puedes chatear sin internet.');
+      await downloadModel(id, setProgress);
+      setDownloaded((d) => ({ ...d, [id]: true }));
+      setMessage(`${nameOf(id)} listo. Ya puedes usarlo sin internet.`);
       onKeyChanged && onKeyChanged(true);
     } catch (e) {
       setMessage('Error al descargar: ' + (e.message || e));
     } finally {
-      setDownloading(false);
+      setDownloadingId(null);
     }
   };
 
   const cancel = async () => {
-    await cancelDownload();
-    setDownloading(false);
+    const id = downloadingId;
+    await cancelDownload(id);
+    setDownloadingId(null);
     setMessage('Descarga cancelada.');
   };
 
-  const remove = async () => {
-    await deleteModel();
-    setReady(false);
-    setMessage('Modelo borrado.');
+  const remove = async (id) => {
+    await deleteModel(id);
+    setDownloaded((d) => ({ ...d, [id]: false }));
+    setMessage(`${nameOf(id)} borrado.`);
     onKeyChanged && onKeyChanged(false);
   };
 
@@ -72,30 +76,42 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>Configuración</Text>
 
-            <Text style={styles.label}>IA en tu teléfono</Text>
-            <Text style={styles.status}>
-              {ready ? '✓ Modelo descargado' : `Todavía no hay modelo (${MODEL_SIZE_TEXT}, descárgalo con Wi‑Fi)`}
-            </Text>
-            {downloading ? (
-              <Text style={styles.hint}>Progreso: {Math.round(progress * 100)}%</Text>
-            ) : null}
+            <Text style={styles.label}>Modelos de IA</Text>
+            <Text style={styles.hint}>Se descargan una sola vez (usa Wi‑Fi) y funcionan sin internet.</Text>
             {message ? <Text style={styles.message}>{message}</Text> : null}
 
-            {!ready && !downloading ? (
-              <TouchableOpacity style={styles.primary} onPress={download}>
-                <Text style={styles.primaryText}>Descargar modelo</Text>
-              </TouchableOpacity>
-            ) : null}
-            {downloading ? (
-              <TouchableOpacity style={styles.secondary} onPress={cancel}>
-                <Text style={styles.dangerText}>Cancelar descarga</Text>
-              </TouchableOpacity>
-            ) : null}
-            {ready ? (
-              <TouchableOpacity style={styles.secondary} onPress={remove}>
-                <Text style={styles.dangerText}>Borrar modelo</Text>
-              </TouchableOpacity>
-            ) : null}
+            {MODELS.map((m) => {
+              const isDown = !!downloaded[m.id];
+              const isBusy = downloadingId === m.id;
+              return (
+                <View key={m.id} style={[styles.modelRow, m.id === selectedId && styles.modelRowSel]}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.modelName}>{m.name}{m.id === selectedId ? '  · seleccionado' : ''}</Text>
+                    <Text style={styles.hint}>
+                      {m.desc} · {m.sizeText}
+                      {isBusy ? ` · ${Math.round(progress * 100)}%` : isDown ? ' · ✓ descargado' : ''}
+                    </Text>
+                  </View>
+                  {isBusy ? (
+                    <TouchableOpacity onPress={cancel} style={styles.smallBtn}>
+                      <Text style={styles.dangerText}>Cancelar</Text>
+                    </TouchableOpacity>
+                  ) : isDown ? (
+                    <TouchableOpacity onPress={() => remove(m.id)} style={styles.smallBtn} disabled={!!downloadingId}>
+                      <Text style={styles.dangerText}>Borrar</Text>
+                    </TouchableOpacity>
+                  ) : (
+                    <TouchableOpacity
+                      onPress={() => download(m.id)}
+                      style={[styles.smallBtn, styles.smallPrimary, downloadingId && { opacity: 0.4 }]}
+                      disabled={!!downloadingId}
+                    >
+                      <Text style={styles.smallPrimaryText}>Descargar</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })}
 
             <View style={styles.divider} />
 
@@ -148,5 +164,14 @@ const styles = StyleSheet.create({
   secondary: { paddingVertical: 12, alignItems: 'center' },
   secondaryText: { color: colors.textDim, fontSize: 15 },
   dangerText: { color: colors.danger, fontSize: 15 },
+  modelRow: {
+    flexDirection: 'row', alignItems: 'center', padding: 12, marginTop: 10, borderRadius: radius.md,
+    borderWidth: 1, borderColor: colors.border, backgroundColor: colors.bg,
+  },
+  modelRowSel: { borderColor: colors.accent },
+  modelName: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  smallBtn: { paddingVertical: 8, paddingHorizontal: 12, marginLeft: 8 },
+  smallPrimary: { backgroundColor: colors.accent, borderRadius: radius.md },
+  smallPrimaryText: { color: colors.onAccent, fontWeight: 'bold', fontSize: 13.5 },
   divider: { height: 1, backgroundColor: colors.border, marginVertical: 20 },
 });
