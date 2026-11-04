@@ -11,6 +11,7 @@
     "base-64": "^1.0.0",
     "expo": "~50.0.0",
     "expo-av": "~13.10.4",
+    "expo-clipboard": "~5.0.1",
     "expo-document-picker": "~11.10.1",
     "expo-file-system": "~16.0.0",
     "expo-secure-store": "~12.8.1",
