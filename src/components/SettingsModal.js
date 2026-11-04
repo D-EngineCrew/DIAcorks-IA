@@ -5,69 +5,55 @@ import {
   KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { colors, radius } from '../theme';
+import { getMemoryNotes, saveMemoryNotes } from './services/storage';
 import {
-  getHfKey, saveHfKey, deleteHfKey, getHfModel, saveHfModel, getHfUrl, saveHfUrl,
-  getMemoryNotes, saveMemoryNotes,
-} from './services/storage';
+  isModelReady, downloadModel, cancelDownload, deleteModel, MODEL_SIZE_TEXT,
+} from './services/localModel';
 
 export default function SettingsModal({ visible, onClose, onKeyChanged }) {
-  const [key, setKey] = useState('');
-  const [hasKey, setHasKey] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [downloading, setDownloading] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [message, setMessage] = useState('');
-  const [model, setModel] = useState('');
-  const [url, setUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [notesMessage, setNotesMessage] = useState('');
 
   useEffect(() => {
     if (visible) {
-      setKey('');
       setMessage('');
       setNotesMessage('');
-      getHfKey().then((k) => setHasKey(!!k));
-      getHfModel().then(setModel);
-      getHfUrl().then(setUrl);
+      isModelReady().then(setReady);
       getMemoryNotes().then(setNotes);
     }
   }, [visible]);
 
-  const save = async () => {
-    const clean = key.trim();
-    if (!clean.startsWith('hf_')) {
-      setMessage('El token debe empezar con "hf_" (Hugging Face) o "gsk_" (Groq).');
-      return;
-    }
+  const download = async () => {
+    setDownloading(true);
+    setProgress(0);
+    setMessage('Descargando el modelo… no cierres la app.');
     try {
-      await saveHfKey(clean);
-      const back = await getHfKey();
-      if (back !== clean) {
-        setMessage('No se pudo verificar la clave guardada. Inténtalo otra vez.');
-        return;
-      }
-      setHasKey(true);
-      setKey('');
-      setMessage('Token guardado en este teléfono.');
+      await downloadModel(setProgress);
+      setReady(true);
+      setMessage('Modelo listo. Ya puedes chatear sin internet.');
       onKeyChanged && onKeyChanged(true);
     } catch (e) {
-      setMessage('Error al guardar: ' + (e.message || e));
+      setMessage('Error al descargar: ' + (e.message || e));
+    } finally {
+      setDownloading(false);
     }
+  };
+
+  const cancel = async () => {
+    await cancelDownload();
+    setDownloading(false);
+    setMessage('Descarga cancelada.');
   };
 
   const remove = async () => {
-    await deleteHfKey();
-    setHasKey(false);
-    setMessage('Token borrado.');
+    await deleteModel();
+    setReady(false);
+    setMessage('Modelo borrado.');
     onKeyChanged && onKeyChanged(false);
-  };
-
-  const saveModelSettings = async () => {
-    try {
-      await saveHfModel(model);
-      await saveHfUrl(url);
-      setMessage('Modelo y endpoint guardados.');
-    } catch (e) {
-      setMessage('No se pudo guardar: ' + (e.message || e));
-    }
   };
 
   const saveNotes = async () => {
@@ -86,58 +72,30 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>Configuración</Text>
 
-            <Text style={styles.label}>Token de Hugging Face</Text>
-            <Text style={styles.status}>{hasKey ? '✓ Ya hay un token guardado' : 'Todavía no hay token guardado'}</Text>
-            <TextInput
-              style={styles.input}
-              value={key}
-              onChangeText={setKey}
-              placeholder="hf_..."
-              placeholderTextColor={colors.textDim}
-              secureTextEntry
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.hint}>El token se guarda solo en este teléfono. No se sube a GitHub.</Text>
+            <Text style={styles.label}>IA en tu teléfono</Text>
+            <Text style={styles.status}>
+              {ready ? '✓ Modelo descargado' : `Todavía no hay modelo (${MODEL_SIZE_TEXT}, descárgalo con Wi‑Fi)`}
+            </Text>
+            {downloading ? (
+              <Text style={styles.hint}>Progreso: {Math.round(progress * 100)}%</Text>
+            ) : null}
             {message ? <Text style={styles.message}>{message}</Text> : null}
 
-            <TouchableOpacity style={styles.primary} onPress={save}>
-              <Text style={styles.primaryText}>Guardar token</Text>
-            </TouchableOpacity>
-            {hasKey ? (
-              <TouchableOpacity style={styles.secondary} onPress={remove}>
-                <Text style={styles.dangerText}>Borrar token</Text>
+            {!ready && !downloading ? (
+              <TouchableOpacity style={styles.primary} onPress={download}>
+                <Text style={styles.primaryText}>Descargar modelo</Text>
               </TouchableOpacity>
             ) : null}
-
-            <View style={styles.divider} />
-
-            <Text style={styles.label}>Tu IA en Hugging Face</Text>
-            <Text style={styles.hint}>Modelo: el ID de tu modelo, ej. tu-usuario/mi-ia</Text>
-            <TextInput
-              style={styles.input}
-              value={model}
-              onChangeText={setModel}
-              placeholder="tu-usuario/mi-ia"
-              placeholderTextColor={colors.textDim}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.hint}>
-              Endpoint (opcional): solo si creaste un Inference Endpoint propio. Déjalo vacío para usar Inference Providers.
-            </Text>
-            <TextInput
-              style={styles.input}
-              value={url}
-              onChangeText={setUrl}
-              placeholder="https://xxxx.endpoints.huggingface.cloud/v1"
-              placeholderTextColor={colors.textDim}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <TouchableOpacity style={styles.primary} onPress={saveModelSettings}>
-              <Text style={styles.primaryText}>Guardar modelo</Text>
-            </TouchableOpacity>
+            {downloading ? (
+              <TouchableOpacity style={styles.secondary} onPress={cancel}>
+                <Text style={styles.dangerText}>Cancelar descarga</Text>
+              </TouchableOpacity>
+            ) : null}
+            {ready ? (
+              <TouchableOpacity style={styles.secondary} onPress={remove}>
+                <Text style={styles.dangerText}>Borrar modelo</Text>
+              </TouchableOpacity>
+            ) : null}
 
             <View style={styles.divider} />
 
