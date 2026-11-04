@@ -6,13 +6,16 @@ import {
 } from 'react-native';
 import { colors, radius } from '../theme';
 import {
-  getClaudeKey, saveClaudeKey, deleteClaudeKey, getMemoryNotes, saveMemoryNotes,
+  getHfKey, saveHfKey, deleteHfKey, getHfModel, saveHfModel, getHfUrl, saveHfUrl,
+  getMemoryNotes, saveMemoryNotes,
 } from './services/storage';
 
 export default function SettingsModal({ visible, onClose, onKeyChanged }) {
   const [key, setKey] = useState('');
   const [hasKey, setHasKey] = useState(false);
   const [message, setMessage] = useState('');
+  const [model, setModel] = useState('');
+  const [url, setUrl] = useState('');
   const [notes, setNotes] = useState('');
   const [notesMessage, setNotesMessage] = useState('');
 
@@ -21,27 +24,29 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
       setKey('');
       setMessage('');
       setNotesMessage('');
-      getClaudeKey().then((k) => setHasKey(!!k));
+      getHfKey().then((k) => setHasKey(!!k));
+      getHfModel().then(setModel);
+      getHfUrl().then(setUrl);
       getMemoryNotes().then(setNotes);
     }
   }, [visible]);
 
   const save = async () => {
     const clean = key.trim();
-    if (!clean.startsWith('sk-')) {
-      setMessage('La clave debe empezar con "sk-". Cópiala completa desde tu cuenta.');
+    if (!clean.startsWith('hf_')) {
+      setMessage('El token debe empezar con "hf_". Cópialo completo desde huggingface.co/settings/tokens.');
       return;
     }
     try {
-      await saveClaudeKey(clean);
-      const back = await getClaudeKey();
+      await saveHfKey(clean);
+      const back = await getHfKey();
       if (back !== clean) {
         setMessage('No se pudo verificar la clave guardada. Inténtalo otra vez.');
         return;
       }
       setHasKey(true);
       setKey('');
-      setMessage('Clave guardada en este teléfono.');
+      setMessage('Token guardado en este teléfono.');
       onKeyChanged && onKeyChanged(true);
     } catch (e) {
       setMessage('Error al guardar: ' + (e.message || e));
@@ -49,10 +54,20 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
   };
 
   const remove = async () => {
-    await deleteClaudeKey();
+    await deleteHfKey();
     setHasKey(false);
-    setMessage('Clave borrada.');
+    setMessage('Token borrado.');
     onKeyChanged && onKeyChanged(false);
+  };
+
+  const saveModelSettings = async () => {
+    try {
+      await saveHfModel(model);
+      await saveHfUrl(url);
+      setMessage('Modelo y endpoint guardados.');
+    } catch (e) {
+      setMessage('No se pudo guardar: ' + (e.message || e));
+    }
   };
 
   const saveNotes = async () => {
@@ -71,29 +86,58 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
           <ScrollView keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
             <Text style={styles.title}>Configuración</Text>
 
-            <Text style={styles.label}>API key (OpenRouter o Claude)</Text>
-            <Text style={styles.status}>{hasKey ? '✓ Ya hay una clave guardada' : 'Todavía no hay clave guardada'}</Text>
+            <Text style={styles.label}>Token de Hugging Face</Text>
+            <Text style={styles.status}>{hasKey ? '✓ Ya hay un token guardado' : 'Todavía no hay token guardado'}</Text>
             <TextInput
               style={styles.input}
               value={key}
               onChangeText={setKey}
-              placeholder="sk-or-v1-..."
+              placeholder="hf_..."
               placeholderTextColor={colors.textDim}
               secureTextEntry
               autoCapitalize="none"
               autoCorrect={false}
             />
-            <Text style={styles.hint}>La clave se guarda solo en este teléfono. No se sube a GitHub.</Text>
+            <Text style={styles.hint}>El token se guarda solo en este teléfono. No se sube a GitHub.</Text>
             {message ? <Text style={styles.message}>{message}</Text> : null}
 
             <TouchableOpacity style={styles.primary} onPress={save}>
-              <Text style={styles.primaryText}>Guardar clave</Text>
+              <Text style={styles.primaryText}>Guardar token</Text>
             </TouchableOpacity>
             {hasKey ? (
               <TouchableOpacity style={styles.secondary} onPress={remove}>
-                <Text style={styles.dangerText}>Borrar clave</Text>
+                <Text style={styles.dangerText}>Borrar token</Text>
               </TouchableOpacity>
             ) : null}
+
+            <View style={styles.divider} />
+
+            <Text style={styles.label}>Tu IA en Hugging Face</Text>
+            <Text style={styles.hint}>Modelo: el ID de tu modelo, ej. tu-usuario/mi-ia</Text>
+            <TextInput
+              style={styles.input}
+              value={model}
+              onChangeText={setModel}
+              placeholder="tu-usuario/mi-ia"
+              placeholderTextColor={colors.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={styles.hint}>
+              Endpoint (opcional): solo si creaste un Inference Endpoint propio. Déjalo vacío para usar Inference Providers.
+            </Text>
+            <TextInput
+              style={styles.input}
+              value={url}
+              onChangeText={setUrl}
+              placeholder="https://xxxx.endpoints.huggingface.cloud/v1"
+              placeholderTextColor={colors.textDim}
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <TouchableOpacity style={styles.primary} onPress={saveModelSettings}>
+              <Text style={styles.primaryText}>Guardar modelo</Text>
+            </TouchableOpacity>
 
             <View style={styles.divider} />
 
