@@ -185,7 +185,7 @@ export default function ChatInterface() {
 
       {!hasKey ? (
         <TouchableOpacity style={styles.banner} onPress={() => setSettingsOpen(true)}>
-          <Text style={styles.bannerText}>Falta tu API key de Hugging Face. Toca aquí para agregarla.</Text>
+          <Text style={styles.bannerText}>Falta descargar el modelo de IA. Toca aquí para descargarlo.</Text>
         </TouchableOpacity>
       ) : null}
 
