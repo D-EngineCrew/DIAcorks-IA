@@ -11,7 +11,7 @@ const PANEL_W = 310;
 
 export const MODES = [
   { id: 'auto', title: 'Automático', desc: 'Modo Artista.' },
-  { id: 'claude', title: 'Solo Codigo', desc: 'Texto, código y archivos.' },
+  { id: 'code', title: 'Solo Codigo', desc: 'Texto, código y archivos.' },
   { id: 'image', title: 'Imágenes', desc: 'Cada mensaje genera una imagen con DIAcorks.' },
   { id: 'voice', title: 'Respuestas con voz', desc: 'DIAcorks responde y DIAcorks lo lee en voz alta.' },
 ];
