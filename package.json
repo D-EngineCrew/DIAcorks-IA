@@ -8,6 +8,7 @@
     "ios": "expo run:ios"
   },
   "dependencies": {
+    "expo": "~5.0.1",
     "base-64": "^1.0.0",
     "expo": "~50.0.0",
     "expo-av": "~13.10.4",
