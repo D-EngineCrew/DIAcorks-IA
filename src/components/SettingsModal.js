@@ -34,7 +34,7 @@ export default function SettingsModal({ visible, onClose, onKeyChanged }) {
   const save = async () => {
     const clean = key.trim();
     if (!clean.startsWith('hf_')) {
-      setMessage('El token debe empezar con "hf_". Cópialo completo desde huggingface.co/settings/tokens.');
+      setMessage('El token debe empezar con "hf_" (Hugging Face) o "gsk_" (Groq).');
       return;
     }
     try {
