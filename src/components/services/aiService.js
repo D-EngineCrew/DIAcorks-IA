@@ -4,7 +4,7 @@ import { getClaudeKey, getMemoryNotes } from './storage';
 
 // ⚠️ Opcional: pega aquí tu API key de OpenRouter (sk-or-v1-...). Si la dejas así, la app usa la que guardes en Menú → Configuración.
 // Ojo: quien vea tu repo o abra el APK podría usar esta clave. Mantén el repo privado.
-const CLAUDE_API_KEY = 'TU_API_KEY_DE_CLAUDE';
+const CLAUDE_API_KEY = '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';
 
 const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const MODEL = 'anthropic/claude-sonnet-5'; // otros modelos: openrouter.ai/models
