@@ -1,18 +1,21 @@
 // src/components/services/storage.js
-// Guarda en el teléfono: la API key y las notas de memoria de la IA
+// Guarda en el teléfono: el token de Hugging Face, el modelo y las notas de memoria de la IA
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
 
-const CLAUDE_KEY = 'diacorks_claude_api_key';
-const KEY_FILE = FileSystem.documentDirectory + 'claude_key.txt';
+const HF_KEY = 'diacorks_hf_api_key';
+const KEY_FILE = FileSystem.documentDirectory + 'hf_key.txt';
+const MODEL_FILE = FileSystem.documentDirectory + 'hf_model.txt';
+const URL_FILE = FileSystem.documentDirectory + 'hf_url.txt';
 const NOTES_FILE = FileSystem.documentDirectory + 'memoria.txt';
 
-export const saveClaudeKey = async (key) => {
+// ---- Token de Hugging Face (hf_...) ----
+export const saveHfKey = async (key) => {
   const clean = key.trim();
   let saved = false;
 
   try {
-    await SecureStore.setItemAsync(CLAUDE_KEY, clean);
+    await SecureStore.setItemAsync(HF_KEY, clean);
     saved = true;
   } catch (e) {
     console.log('SecureStore falló:', e);
@@ -28,9 +31,9 @@ export const saveClaudeKey = async (key) => {
   if (!saved) throw new Error('No se pudo guardar la clave en el teléfono.');
 };
 
-export const getClaudeKey = async () => {
+export const getHfKey = async () => {
   try {
-    const k = await SecureStore.getItemAsync(CLAUDE_KEY);
+    const k = await SecureStore.getItemAsync(HF_KEY);
     if (k) return k;
   } catch (e) {}
 
@@ -45,10 +48,29 @@ export const getClaudeKey = async () => {
   return null;
 };
 
-export const deleteClaudeKey = async () => {
-  try { await SecureStore.deleteItemAsync(CLAUDE_KEY); } catch (e) {}
+export const deleteHfKey = async () => {
+  try { await SecureStore.deleteItemAsync(HF_KEY); } catch (e) {}
   try { await FileSystem.deleteAsync(KEY_FILE, { idempotent: true }); } catch (e) {}
 };
+
+// ---- Modelo y endpoint de Hugging Face (opcionales) ----
+const readText = async (file) => {
+  try {
+    const info = await FileSystem.getInfoAsync(file);
+    if (info.exists) return (await FileSystem.readAsStringAsync(file)).trim();
+  } catch (e) {}
+  return '';
+};
+
+export const saveHfModel = async (model) => {
+  await FileSystem.writeAsStringAsync(MODEL_FILE, (model || '').trim());
+};
+export const getHfModel = () => readText(MODEL_FILE);
+
+export const saveHfUrl = async (url) => {
+  await FileSystem.writeAsStringAsync(URL_FILE, (url || '').trim());
+};
+export const getHfUrl = () => readText(URL_FILE);
 
 // Memoria: lo que la IA debe recordar siempre sobre ti (nombre, gustos, cómo quieres que hable...)
 export const saveMemoryNotes = async (text) => {
