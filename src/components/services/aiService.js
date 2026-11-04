@@ -1,7 +1,7 @@
 // src/components/services/aiService.js
 // Chat de texto con la IA que corre dentro del teléfono (sin API key).
 import { getMemoryNotes } from './storage';
-import { isModelReady, generate } from './localModel';
+import { isModelReady, generate, stopGeneration } from './localModel';
 
 const SYSTEM_PROMPT =
   'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa.';
@@ -11,6 +11,7 @@ const MAX_HISTORY = 6;
 
 // "Hay IA lista" = el modelo ya está descargado
 export const hasAIKey = async () => isModelReady();
+export const stopAIResponse = stopGeneration;
 // Alias con el nombre antiguo, por si algún archivo todavía lo importa
 export const hasClaudeKey = hasAIKey;
 
@@ -18,11 +19,12 @@ export const hasClaudeKey = hasAIKey;
  * @param {string} prompt  Texto del usuario
  * @param {object|null} fileData  Resultado de pickAndReadFile() (opcional)
  * @param {Array} history  [{ role: 'user'|'assistant', content: '...' }] (opcional)
+ * @param {(partial: string) => void} [onToken]  texto acumulado mientras la IA escribe
  * @returns {Promise<{ text: string, isError?: boolean }>}
  */
-export const fetchAIResponse = async (prompt, fileData = null, history = []) => {
+export const fetchAIResponse = async (prompt, fileData = null, history = [], onToken = null) => {
   if (!(await isModelReady())) {
-    return { text: 'Falta descargar el modelo de IA. Ábrelo en Menú → Configuración.', isError: true };
+    return { text: 'Falta descargar el modelo seleccionado. Ábrelo en Menú → Configuración.', isError: true };
   }
 
   if (fileData && fileData.type !== 'text') {
@@ -49,7 +51,7 @@ export const fetchAIResponse = async (prompt, fileData = null, history = []) => 
       { role: 'system', content: system },
       ...recent,
       { role: 'user', content: userText },
-    ]);
+    ], onToken);
     return { text: text || '(La IA no devolvió texto)' };
   } catch (error) {
     console.log(error);
