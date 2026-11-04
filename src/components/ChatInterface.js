@@ -8,7 +8,7 @@ import { colors, radius } from '../theme';
 import MessageBubble from './MessageBubble';
 import Menu, { MODES } from './Menu';
 import SettingsModal from './SettingsModal';
-import { fetchAIResponse, hasClaudeKey } from './services/aiService';
+import { fetchAIResponse, hasAIKey } from './services/aiService';
 import { generateImage, speak, isImageRequest } from './services/geminiService';
 import { pickAndReadFile } from './services/utils/fileHandler';
 import { loadStore, saveStore, deleteLocalFile } from './services/chatStore';
@@ -55,7 +55,7 @@ export default function ChatInterface() {
   const listRef = useRef(null);
 
   useEffect(() => {
-    hasClaudeKey().then(setHasKey);
+    hasAIKey().then(setHasKey);
   }, []);
 
   // Al abrir la app: recupera los chats guardados y abre el último
@@ -185,7 +185,7 @@ export default function ChatInterface() {
 
       {!hasKey ? (
         <TouchableOpacity style={styles.banner} onPress={() => setSettingsOpen(true)}>
-          <Text style={styles.bannerText}>Falta tu API key de Claude. Toca aquí para agregarla.</Text>
+          <Text style={styles.bannerText}>Falta tu API key de Hugging Face. Toca aquí para agregarla.</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -264,7 +264,7 @@ export default function ChatInterface() {
       <SettingsModal
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
-        onKeyChanged={() => hasClaudeKey().then(setHasKey)}
+        onKeyChanged={() => hasAIKey().then(setHasKey)}
       />
     </View>
   );
@@ -316,3 +316,4 @@ const styles = StyleSheet.create({
   },
   sendText: { color: colors.onAccent, fontWeight: 'bold', fontSize: 15 },
 });
+    
