@@ -1,26 +1,30 @@
 // src/components/services/aiService.js
-// Chat de texto con Claude a través de OpenRouter (llaves que empiezan con sk-or-...)
-import { getClaudeKey, getMemoryNotes } from './storage';
+// Chat de texto con tu IA en Hugging Face (token que empieza con hf_...)
+import { getHfKey, getHfModel, getHfUrl, getMemoryNotes } from './storage';
 
-// ⚠️ Opcional: pega aquí tu API key de OpenRouter (sk-or-v1-...). Si la dejas así, la app usa la que guardes en Menú → Configuración.
-// Ojo: quien vea tu repo o abra el APK podría usar esta clave. Mantén el repo privado.
-const CLAUDE_API_KEY = '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';
-
-const API_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const MODEL = 'anthropic/claude-sonnet-5'; // otros modelos: openrouter.ai/models
+// Valores por defecto. Puedes cambiarlos desde Menú → Configuración (sin tocar el código).
+// - Modelo: el ID de tu modelo en Hugging Face, ej. "DIAcorks/DIAcorks"
+// - Endpoint: déjalo vacío para usar Inference Providers de Hugging Face.
+//   Si creaste un Inference Endpoint propio, pega su URL (termina en /v1 o /v1/chat/completions).
+const DEFAULT_URL = 'https://router.huggingface.co/v1/chat/completions';
+const DEFAULT_MODEL = 'meta-llama/Llama-3.1-8B-Instruct';
 const MAX_TOKENS = 2048;
 
 const SYSTEM_PROMPT =
-  'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa.';
+  'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa Tienes acceso a internet puedes crear zips y más.';
 
-const getKey = async () => {
-  if (CLAUDE_API_KEY && CLAUDE_API_KEY !== 'TU_API_KEY_DE_CLAUDE') return CLAUDE_API_KEY;
-  return getClaudeKey();
+// Acepta ".../v1", ".../v1/" o la URL completa de chat/completions
+const normalizeUrl = (url) => {
+  const u = (url || '').trim().replace(/\/+$/, '');
+  if (!u) return DEFAULT_URL;
+  if (u.endsWith('/chat/completions')) return u;
+  if (u.endsWith('/v1')) return u + '/chat/completions';
+  return u + '/v1/chat/completions';
 };
 
-export const hasClaudeKey = async () => !!(await getKey());
+export const hasAIKey = async () => !!(await getHfKey());
 
-// Convierte el archivo adjunto al formato de OpenRouter (compatible con OpenAI)
+// Convierte el archivo adjunto al formato compatible con OpenAI
 const fileToParts = (fileData) => {
   if (!fileData) return [];
 
@@ -47,9 +51,9 @@ const fileToParts = (fileData) => {
  * @returns {Promise<{ text: string, isError?: boolean }>}
  */
 export const fetchAIResponse = async (prompt, fileData = null, history = []) => {
-  const apiKey = await getKey();
+  const apiKey = await getHfKey();
   if (!apiKey) {
-    return { text: 'Falta tu API key. Ábrela en Menú → Configuración.', isError: true };
+    return { text: 'Falta tu token de Hugging Face. Ábrelo en Menú → Configuración.', isError: true };
   }
 
   try {
@@ -61,15 +65,17 @@ export const fetchAIResponse = async (prompt, fileData = null, history = []) => 
       ? `${SYSTEM_PROMPT}\n\nLo que debes recordar siempre sobre el usuario:\n${notes}`
       : SYSTEM_PROMPT;
 
-    const response = await fetch(API_URL, {
+    const model = (await getHfModel()) || DEFAULT_MODEL;
+    const url = normalizeUrl(await getHfUrl());
+
+    const response = await fetch(url, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
         Authorization: `Bearer ${apiKey}`,
-        'X-Title': 'DIAcorks IA',
       },
       body: JSON.stringify({
-        model: MODEL,
+        model,
         max_tokens: MAX_TOKENS,
         messages: [
           { role: 'system', content: system },
@@ -82,11 +88,13 @@ export const fetchAIResponse = async (prompt, fileData = null, history = []) => 
     const data = await response.json();
 
     if (!response.ok) {
-      console.log('Error de OpenRouter:', data);
-      if (response.status === 401) return { text: 'API key inválida. Revisa tu clave en Menú → Configuración.', isError: true };
-      if (response.status === 402) return { text: 'Tu cuenta de OpenRouter no tiene créditos suficientes.', isError: true };
+      console.log('Error de Hugging Face:', data);
+      if (response.status === 401) return { text: 'Token inválido. Revisa tu token de Hugging Face en Menú → Configuración.', isError: true };
+      if (response.status === 402) return { text: 'Tu cuenta de Hugging Face no tiene créditos suficientes.', isError: true };
+      if (response.status === 404) return { text: 'No se encontró el modelo o el endpoint. Revisa el nombre del modelo en Menú → Configuración.', isError: true };
+      if (response.status === 503) return { text: 'Tu modelo se está iniciando o está dormido. Espera un minuto y vuelve a intentar.', isError: true };
       if (response.status === 429) return { text: 'Demasiadas peticiones. Espera un momento e inténtalo de nuevo.', isError: true };
-      return { text: `Error de la API: ${data?.error?.message || response.status}`, isError: true };
+      return { text: `Error de la API: ${(typeof data?.error === 'string' ? data.error : data?.error?.message) || response.status}`, isError: true };
     }
 
     const message = data?.choices?.[0]?.message?.content;
