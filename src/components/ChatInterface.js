@@ -2,13 +2,16 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   View, Text, TextInput, FlatList, TouchableOpacity, KeyboardAvoidingView,
-  Platform, ActivityIndicator, StyleSheet, StatusBar,
+  Platform, ActivityIndicator, StyleSheet, StatusBar, Alert,
 } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { colors, radius } from '../theme';
 import MessageBubble from './MessageBubble';
 import Menu, { MODES } from './Menu';
 import SettingsModal from './SettingsModal';
-import { fetchAIResponse, hasAIKey } from './services/aiService';
+import ModelPicker from './ModelPicker';
+import { fetchAIResponse, hasAIKey, stopAIResponse } from './services/aiService';
+import { getSelectedModelId, setSelectedModelId } from './services/localModel';
 import { generateImage, speak, isImageRequest } from './services/geminiService';
 import { pickAndReadFile } from './services/utils/fileHandler';
 import { loadStore, saveStore, deleteLocalFile } from './services/chatStore';
@@ -28,7 +31,7 @@ const makeTitle = (messages) => {
   return t.length > 34 ? t.slice(0, 34) + '…' : t;
 };
 
-// Historial de texto para que Claude recuerde la conversación
+// Historial de texto para que la IA recuerde la conversación
 const buildHistory = (messages) => {
   const h = messages
     .filter((m) => m.type === 'text' && !m.isError && m.text)
@@ -48,6 +51,8 @@ export default function ChatInterface() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasKey, setHasKey] = useState(true);
+  const [modelId, setModelId] = useState('diacorks');
+  const [generating, setGenerating] = useState(false);
   const [speakingId, setSpeakingId] = useState(null);
   const [chats, setChats] = useState([]);
   const [currentId, setCurrentId] = useState(uid());
@@ -55,8 +60,24 @@ export default function ChatInterface() {
   const listRef = useRef(null);
 
   useEffect(() => {
-    hasAIKey().then(setHasKey);
+    getSelectedModelId().then((id) => {
+      setModelId(id);
+      hasAIKey().then(setHasKey);
+    });
   }, []);
+
+  // Cambiar de modelo ya descargado
+  const selectModel = async (id) => {
+    await setSelectedModelId(id);
+    setModelId(id);
+    hasAIKey().then(setHasKey);
+  };
+
+  // Modelo sin descargar: se selecciona y te lleva a Configuración para descargarlo
+  const needDownload = async (id) => {
+    await selectModel(id);
+    setSettingsOpen(true);
+  };
 
   // Al abrir la app: recupera los chats guardados y abre el último
   useEffect(() => {
@@ -149,8 +170,23 @@ export default function ChatInterface() {
         else addMessage({ role: 'bot', type: 'text', text: res.error, isError: true });
       } else {
         setLoadingText('Pensando…');
-        const res = await fetchAIResponse(prompt, attached, history);
-        addMessage({ role: 'bot', type: 'text', text: res.text, isError: !!res.isError });
+        setGenerating(true);
+        const botId = uid();
+        setMessages((prev) => [...prev, { id: botId, role: 'bot', type: 'text', text: '', streaming: true }]);
+        let lastUpdate = 0;
+        const res = await fetchAIResponse(prompt, attached, history, (partial) => {
+          const now = Date.now();
+          if (now - lastUpdate > 100) {
+            lastUpdate = now;
+            setMessages((prev) => prev.map((m) => (m.id === botId ? { ...m, text: partial } : m)));
+          }
+        });
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === botId ? { ...m, text: res.text, isError: !!res.isError, streaming: false } : m
+          )
+        );
+        setGenerating(false);
         if (mode === 'voice' && !res.isError) {
           setLoadingText('Generando voz…');
           const v = await speak(res.text);
@@ -158,8 +194,33 @@ export default function ChatInterface() {
         }
       }
     } finally {
+      setGenerating(false);
       setLoading(false);
     }
+  };
+
+  const stop = () => stopAIResponse();
+
+  // Mantener pulsado un mensaje: copiar o (si es tuyo) editar y reenviar
+  const copyText = async (msg) => {
+    try { await Clipboard.setStringAsync(msg.text || ''); } catch (e) {}
+  };
+
+  const editMessage = (msg) => {
+    if (loading) return;
+    const idx = messages.findIndex((m) => m.id === msg.id);
+    if (idx < 0) return;
+    setInput(msg.text || '');
+    setMessages(messages.slice(0, idx));
+    if (idx === 0) setChats((prev) => prev.filter((c) => c.id !== currentId));
+  };
+
+  const onMessageLongPress = (msg) => {
+    if (msg.type !== 'text') return;
+    const buttons = [{ text: 'Copiar', onPress: () => copyText(msg) }];
+    if (msg.role === 'user') buttons.push({ text: 'Editar y reenviar', onPress: () => editMessage(msg) });
+    buttons.push({ text: 'Cancelar', style: 'cancel' });
+    Alert.alert('Mensaje', undefined, buttons);
   };
 
   const onSpeak = async (msg) => {
@@ -181,11 +242,17 @@ export default function ChatInterface() {
           <Text style={styles.title}>DIAcorks IA</Text>
           <Text style={styles.subtitle}>Modo: {modeTitle}</Text>
         </View>
+        <ModelPicker
+          selectedId={modelId}
+          onSelect={selectModel}
+          onNeedDownload={needDownload}
+          disabled={loading}
+        />
       </View>
 
       {!hasKey ? (
         <TouchableOpacity style={styles.banner} onPress={() => setSettingsOpen(true)}>
-          <Text style={styles.bannerText}>Falta descargar el modelo de IA. Toca aquí para descargarlo.</Text>
+          <Text style={styles.bannerText}>Falta descargar el modelo seleccionado. Toca aquí para descargarlo.</Text>
         </TouchableOpacity>
       ) : null}
 
@@ -208,14 +275,21 @@ export default function ChatInterface() {
             data={messages}
             keyExtractor={(item) => item.id}
             renderItem={({ item }) => (
-              <MessageBubble msg={item} onSpeak={onSpeak} speaking={speakingId === item.id} />
+              <MessageBubble
+                msg={item}
+                onSpeak={onSpeak}
+                speaking={speakingId === item.id}
+                streaming={loading && !!item.streaming}
+                onLongPress={onMessageLongPress}
+                onCopy={copyText}
+              />
             )}
             contentContainerStyle={{ paddingVertical: 10 }}
             onContentSizeChange={() => listRef.current?.scrollToEnd({ animated: true })}
           />
         )}
 
-        {loading ? (
+        {loading && !generating ? (
           <View style={styles.loading}>
             <ActivityIndicator color={colors.accent} />
             <Text style={styles.loadingText}>{loadingText}</Text>
@@ -243,9 +317,15 @@ export default function ChatInterface() {
             placeholderTextColor={colors.textDim}
             multiline
           />
-          <TouchableOpacity onPress={send} style={[styles.sendBtn, loading && { opacity: 0.5 }]} disabled={loading}>
-            <Text style={styles.sendText}>Enviar</Text>
-          </TouchableOpacity>
+          {generating ? (
+            <TouchableOpacity onPress={stop} style={[styles.sendBtn, { backgroundColor: colors.danger }]}>
+              <Text style={styles.sendText}>■ Detener</Text>
+            </TouchableOpacity>
+          ) : (
+            <TouchableOpacity onPress={send} style={[styles.sendBtn, loading && { opacity: 0.5 }]} disabled={loading}>
+              <Text style={styles.sendText}>Enviar</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </KeyboardAvoidingView>
 
@@ -265,6 +345,7 @@ export default function ChatInterface() {
         visible={settingsOpen}
         onClose={() => setSettingsOpen(false)}
         onKeyChanged={() => hasAIKey().then(setHasKey)}
+        selectedId={modelId}
       />
     </View>
   );
@@ -316,4 +397,3 @@ const styles = StyleSheet.create({
   },
   sendText: { color: colors.onAccent, fontWeight: 'bold', fontSize: 15 },
 });
-    
