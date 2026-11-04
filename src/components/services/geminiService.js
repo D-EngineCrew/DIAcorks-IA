@@ -54,7 +54,14 @@ export const generateImage = async (prompt) => {
       return { error: 'Gemini no devolvió ninguna imagen. Prueba con otra descripción.' };
     }
     const { mimeType, data } = parts[0].inlineData;
-    return { uri: `data:${mimeType};base64,${data}` };
+    const ext = mimeType.includes('jpeg') ? 'jpg' : 'png';
+    const dir = FileSystem.documentDirectory + 'imagenes/';
+    try {
+      await FileSystem.makeDirectoryAsync(dir, { intermediates: true });
+    } catch (e) {}
+    const path = `${dir}img_${Date.now()}.${ext}`;
+    await FileSystem.writeAsStringAsync(path, data, { encoding: FileSystem.EncodingType.Base64 });
+    return { uri: path };
   } catch (error) {
     console.log('Error generando imagen:', error);
     return { error: `No se pudo generar la imagen.\nDetalle: ${errText(error)}` };

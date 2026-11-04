@@ -11,6 +11,7 @@ import SettingsModal from './SettingsModal';
 import { fetchAIResponse, hasClaudeKey } from './services/aiService';
 import { generateImage, speak, isImageRequest } from './services/geminiService';
 import { pickAndReadFile } from './services/utils/fileHandler';
+import { loadStore, saveStore, deleteLocalFile } from './services/chatStore';
 
 const SUGGESTIONS = [
   'Dibuja un dragón de cristal',
@@ -20,6 +21,12 @@ const SUGGESTIONS = [
 
 let counter = 0;
 const uid = () => `${Date.now()}_${counter++}`;
+
+const makeTitle = (messages) => {
+  const first = messages.find((m) => m.role === 'user' && m.text);
+  const t = (first ? first.text : 'Chat nuevo').replace(/\s+/g, ' ').trim();
+  return t.length > 34 ? t.slice(0, 34) + '…' : t;
+};
 
 // Historial de texto para que Claude recuerde la conversación
 const buildHistory = (messages) => {
@@ -42,11 +49,71 @@ export default function ChatInterface() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [hasKey, setHasKey] = useState(true);
   const [speakingId, setSpeakingId] = useState(null);
+  const [chats, setChats] = useState([]);
+  const [currentId, setCurrentId] = useState(uid());
+  const [ready, setReady] = useState(false);
   const listRef = useRef(null);
 
   useEffect(() => {
     hasClaudeKey().then(setHasKey);
   }, []);
+
+  // Al abrir la app: recupera los chats guardados y abre el último
+  useEffect(() => {
+    loadStore().then((store) => {
+      setChats(store.chats);
+      const last = store.chats.find((c) => c.id === store.currentId) || store.chats[0];
+      if (last) {
+        setCurrentId(last.id);
+        setMessages(last.messages);
+      }
+      setReady(true);
+    });
+  }, []);
+
+  // Cada vez que cambian los mensajes, actualiza el chat actual en el historial
+  useEffect(() => {
+    if (!ready || messages.length === 0) return;
+    setChats((prev) => {
+      const existing = prev.find((c) => c.id === currentId);
+      if (existing && existing.messages === messages) return prev; // sin cambios (chat recién abierto)
+      const chat = { id: currentId, title: makeTitle(messages), updatedAt: Date.now(), messages };
+      return [chat, ...prev.filter((c) => c.id !== currentId)];
+    });
+  }, [messages, ready]);
+
+  // Guarda en el teléfono (con una pequeña espera para no escribir a cada letra)
+  useEffect(() => {
+    if (!ready) return undefined;
+    const t = setTimeout(() => saveStore({ chats, currentId }), 400);
+    return () => clearTimeout(t);
+  }, [chats, currentId, ready]);
+
+  const newChat = () => {
+    if (loading) return;
+    setMessages([]);
+    setFile(null);
+    setCurrentId(uid());
+  };
+
+  const openChat = (id) => {
+    if (loading) return;
+    const chat = chats.find((c) => c.id === id);
+    if (!chat) return;
+    setCurrentId(id);
+    setMessages(chat.messages);
+    setFile(null);
+  };
+
+  const deleteChat = (id) => {
+    const chat = chats.find((c) => c.id === id);
+    if (chat) chat.messages.forEach((m) => m.type === 'image' && deleteLocalFile(m.uri));
+    setChats((prev) => prev.filter((c) => c.id !== id));
+    if (id === currentId) {
+      setMessages([]);
+      setCurrentId(uid());
+    }
+  };
 
   const addMessage = (m) => setMessages((prev) => [...prev, { id: uid(), ...m }]);
 
@@ -187,8 +254,12 @@ export default function ChatInterface() {
         onClose={() => setMenuOpen(false)}
         mode={mode}
         onChangeMode={setMode}
-        onNewChat={() => { setMessages([]); setFile(null); }}
+        onNewChat={newChat}
         onOpenSettings={() => setSettingsOpen(true)}
+        chats={chats}
+        currentId={currentId}
+        onOpenChat={openChat}
+        onDeleteChat={deleteChat}
       />
       <SettingsModal
         visible={settingsOpen}

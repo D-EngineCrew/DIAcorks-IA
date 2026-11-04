@@ -1,37 +1,23 @@
-
+// src/components/services/storage.js
+// Guarda en el teléfono: la API key y las notas de memoria de la IA
 import * as SecureStore from 'expo-secure-store';
 import * as FileSystem from 'expo-file-system';
 
-// ==========================================
-// DIAcorks - OPENROUTER STORAGE
-// ==========================================
+const CLAUDE_KEY = 'diacorks_claude_api_key';
+const KEY_FILE = FileSystem.documentDirectory + 'claude_key.txt';
+const NOTES_FILE = FileSystem.documentDirectory + 'memoria.txt';
 
-const OPENROUTER_KEY = 'diacorks_openrouter_api_key';
-
-const KEY_FILE =
-  FileSystem.documentDirectory + 'openrouter_key.txt';
-
-// ==========================================
-// GUARDAR API KEY
-// ==========================================
-
-export const saveOpenRouterKey = async (key) => {
-  if (typeof key !== 'string' || !key.trim()) {
-    throw new Error('La API Key de OpenRouter no puede estar vacía.');
-  }
-
+export const saveClaudeKey = async (key) => {
   const clean = key.trim();
   let saved = false;
 
-  // Almacenamiento seguro
   try {
-    await SecureStore.setItemAsync(OPENROUTER_KEY, clean);
+    await SecureStore.setItemAsync(CLAUDE_KEY, clean);
     saved = true;
   } catch (e) {
     console.log('SecureStore falló:', e);
   }
 
-  // Archivo privado como respaldo
   try {
     await FileSystem.writeAsStringAsync(KEY_FILE, clean);
     saved = true;
@@ -39,72 +25,40 @@ export const saveOpenRouterKey = async (key) => {
     console.log('Archivo de clave falló:', e);
   }
 
-  if (!saved) {
-    throw new Error(
-      'No se pudo guardar la API Key de OpenRouter en el teléfono.'
-    );
-  }
+  if (!saved) throw new Error('No se pudo guardar la clave en el teléfono.');
 };
 
-// ==========================================
-// OBTENER API KEY
-// ==========================================
-
-export const getOpenRouterKey = async () => {
-  // Primero intenta SecureStore
+export const getClaudeKey = async () => {
   try {
-    const key = await SecureStore.getItemAsync(OPENROUTER_KEY);
+    const k = await SecureStore.getItemAsync(CLAUDE_KEY);
+    if (k) return k;
+  } catch (e) {}
 
-    if (key) return key;
-  } catch (e) {
-    console.log('Error leyendo SecureStore:', e);
-  }
-
-  // Después intenta el archivo privado
   try {
     const info = await FileSystem.getInfoAsync(KEY_FILE);
-
     if (info.exists) {
-      const key = (
-        await FileSystem.readAsStringAsync(KEY_FILE)
-      ).trim();
-
-      if (key) return key;
+      const k = (await FileSystem.readAsStringAsync(KEY_FILE)).trim();
+      if (k) return k;
     }
-  } catch (e) {
-    console.log('Error leyendo archivo de respaldo:', e);
-  }
+  } catch (e) {}
 
   return null;
 };
 
-// ==========================================
-// ELIMINAR API KEY
-// ==========================================
-
-export const deleteOpenRouterKey = async () => {
-  try {
-    await SecureStore.deleteItemAsync(OPENROUTER_KEY);
-  } catch (e) {
-    console.log('Error eliminando SecureStore:', e);
-  }
-
-  try {
-    await FileSystem.deleteAsync(KEY_FILE, {
-      idempotent: true,
-    });
-  } catch (e) {
-    console.log('Error eliminando archivo:', e);
-  }
+export const deleteClaudeKey = async () => {
+  try { await SecureStore.deleteItemAsync(CLAUDE_KEY); } catch (e) {}
+  try { await FileSystem.deleteAsync(KEY_FILE, { idempotent: true }); } catch (e) {}
 };
 
-// ==========================================
-// COMPATIBILIDAD CON CÓDIGO ANTERIOR
-// ==========================================
+// Memoria: lo que la IA debe recordar siempre sobre ti (nombre, gustos, cómo quieres que hable...)
+export const saveMemoryNotes = async (text) => {
+  await FileSystem.writeAsStringAsync(NOTES_FILE, (text || '').trim());
+};
 
-// Permite que componentes antiguos que utilizan Claude
-// sigan funcionando mientras actualizas el resto del proyecto.
-
-export const saveClaudeKey = saveOpenRouterKey;
-export const getClaudeKey = getOpenRouterKey;
-export const deleteClaudeKey = deleteOpenRouterKey;
+export const getMemoryNotes = async () => {
+  try {
+    const info = await FileSystem.getInfoAsync(NOTES_FILE);
+    if (info.exists) return (await FileSystem.readAsStringAsync(NOTES_FILE)).trim();
+  } catch (e) {}
+  return '';
+};
