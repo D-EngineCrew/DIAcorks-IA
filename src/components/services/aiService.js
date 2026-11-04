@@ -1,48 +1,18 @@
 // src/components/services/aiService.js
-// Chat de texto con tu IA en Hugging Face (token que empieza con hf_...)
-import { getHfKey, getHfModel, getHfUrl, getMemoryNotes } from './storage';
-
-// Valores por defecto. Puedes cambiarlos desde Menú → Configuración (sin tocar el código).
-// - Modelo: el ID de tu modelo en Hugging Face, ej. "DIAcorks/DIAcorks"
-// - Endpoint: déjalo vacío para usar Inference Providers de Hugging Face.
-//   Si creaste un Inference Endpoint propio, pega su URL (termina en /v1 o /v1/chat/completions).
-const DEFAULT_URL = 'https://router.huggingface.co/v1/chat/completions';
-const DEFAULT_MODEL = 'meta-llama/Llama-3.1-8B-Instruct';
-const MAX_TOKENS = 2048;
+// Chat de texto con la IA que corre dentro del teléfono (sin API key).
+import { getMemoryNotes } from './storage';
+import { isModelReady, generate } from './localModel';
 
 const SYSTEM_PROMPT =
-  'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa Tienes acceso a internet puedes crear zips y más.';
+  'Eres DIAcorks IA, un asistente en español que ayuda con preguntas generales, código y archivos. Responde de forma clara y directa.';
 
-// Acepta ".../v1", ".../v1/" o la URL completa de chat/completions
-const normalizeUrl = (url) => {
-  const u = (url || '').trim().replace(/\/+$/, '');
-  if (!u) return DEFAULT_URL;
-  if (u.endsWith('/chat/completions')) return u;
-  if (u.endsWith('/v1')) return u + '/chat/completions';
-  return u + '/v1/chat/completions';
-};
+const MAX_FILE_CHARS = 5000; // el modelo local tiene poca memoria de contexto
+const MAX_HISTORY = 6;
 
-export const hasAIKey = async () => !!(await getHfKey());
-
-// Convierte el archivo adjunto al formato compatible con OpenAI
-const fileToParts = (fileData) => {
-  if (!fileData) return [];
-
-  if (fileData.type === 'text') {
-    return [
-      {
-        type: 'text',
-        text: `Archivo "${fileData.name}":\n\`\`\`\n${fileData.content}\n\`\`\``,
-      },
-    ];
-  }
-
-  const dataUrl = `data:${fileData.mimeType};base64,${fileData.data}`;
-  if (fileData.mimeType === 'application/pdf') {
-    return [{ type: 'file', file: { filename: fileData.name, file_data: dataUrl } }];
-  }
-  return [{ type: 'image_url', image_url: { url: dataUrl } }];
-};
+// "Hay IA lista" = el modelo ya está descargado
+export const hasAIKey = async () => isModelReady();
+// Alias con el nombre antiguo, por si algún archivo todavía lo importa
+export const hasClaudeKey = hasAIKey;
 
 /**
  * @param {string} prompt  Texto del usuario
@@ -51,59 +21,38 @@ const fileToParts = (fileData) => {
  * @returns {Promise<{ text: string, isError?: boolean }>}
  */
 export const fetchAIResponse = async (prompt, fileData = null, history = []) => {
-  const apiKey = await getHfKey();
-  if (!apiKey) {
-    return { text: 'Falta tu token de Hugging Face. Ábrelo en Menú → Configuración.', isError: true };
+  if (!(await isModelReady())) {
+    return { text: 'Falta descargar el modelo de IA. Ábrelo en Menú → Configuración.', isError: true };
+  }
+
+  if (fileData && fileData.type !== 'text') {
+    return { text: 'La IA local solo puede leer archivos de texto o código (no imágenes ni PDF).', isError: true };
   }
 
   try {
-    const content = [...fileToParts(fileData), { type: 'text', text: prompt }];
+    let userText = prompt;
+    if (fileData) {
+      const body = String(fileData.content || '');
+      const cut = body.length > MAX_FILE_CHARS ? body.slice(0, MAX_FILE_CHARS) + '\n…(archivo recortado)' : body;
+      userText = `Archivo "${fileData.name}":\n\`\`\`\n${cut}\n\`\`\`\n\n${prompt}`;
+    }
 
-    // Lo que el usuario pidió que la IA recuerde siempre
     const notes = await getMemoryNotes();
     const system = notes
       ? `${SYSTEM_PROMPT}\n\nLo que debes recordar siempre sobre el usuario:\n${notes}`
       : SYSTEM_PROMPT;
 
-    const model = (await getHfModel()) || DEFAULT_MODEL;
-    const url = normalizeUrl(await getHfUrl());
+    const recent = history.slice(-MAX_HISTORY);
+    while (recent.length && recent[0].role !== 'user') recent.shift();
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'content-type': 'application/json',
-        Authorization: `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        max_tokens: MAX_TOKENS,
-        messages: [
-          { role: 'system', content: system },
-          ...history,
-          { role: 'user', content },
-        ],
-      }),
-    });
-
-    const data = await response.json();
-
-    if (!response.ok) {
-      console.log('Error de Hugging Face:', data);
-      if (response.status === 401) return { text: 'Token inválido. Revisa tu token de Hugging Face en Menú → Configuración.', isError: true };
-      if (response.status === 402) return { text: 'Tu cuenta de Hugging Face no tiene créditos suficientes.', isError: true };
-      if (response.status === 404) return { text: 'No se encontró el modelo o el endpoint. Revisa el nombre del modelo en Menú → Configuración.', isError: true };
-      if (response.status === 503) return { text: 'Tu modelo se está iniciando o está dormido. Espera un minuto y vuelve a intentar.', isError: true };
-      if (response.status === 429) return { text: 'Demasiadas peticiones. Espera un momento e inténtalo de nuevo.', isError: true };
-      return { text: `Error de la API: ${(typeof data?.error === 'string' ? data.error : data?.error?.message) || response.status}`, isError: true };
-    }
-
-    const message = data?.choices?.[0]?.message?.content;
-    const text = Array.isArray(message)
-      ? message.map((p) => p.text || '').join('\n')
-      : message;
+    const text = await generate([
+      { role: 'system', content: system },
+      ...recent,
+      { role: 'user', content: userText },
+    ]);
     return { text: text || '(La IA no devolvió texto)' };
   } catch (error) {
     console.log(error);
-    return { text: 'Error de conexión. Revisa tu internet.', isError: true };
+    return { text: 'No se pudo ejecutar el modelo: ' + String((error && error.message) || error), isError: true };
   }
 };
