@@ -120,7 +120,7 @@ export default function Menu({
         <TouchableOpacity style={styles.item} onPress={() => { onClose(); onOpenSettings(); }}>
           <Text style={styles.itemText}>⚙️  Configuración y memoria</Text>
         </TouchableOpacity>
-        <Text style={styles.version}>DIAcorks v1.1.0 · DF-PM Projects</Text>
+        <Text style={styles.version}>DIAcorks v0.0.8 · DF-PM Projects</Text>
       </Animated.View>
 
       <Pressable style={styles.overlay} onPress={onClose} />
