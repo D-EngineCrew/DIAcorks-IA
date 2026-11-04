@@ -10,10 +10,10 @@ import { colors, radius } from '../theme';
 const PANEL_W = 310;
 
 export const MODES = [
-  { id: 'auto', title: 'Automático', desc: 'Claude responde. Si pides una imagen, la dibuja Gemini.' },
-  { id: 'claude', title: 'Solo Claude', desc: 'Texto, código y archivos.' },
-  { id: 'image', title: 'Imágenes', desc: 'Cada mensaje genera una imagen con Gemini.' },
-  { id: 'voice', title: 'Respuestas con voz', desc: 'Claude responde y Gemini lo lee en voz alta.' },
+  { id: 'auto', title: 'Automático', desc: 'Modo Artista.' },
+  { id: 'codigo', title: 'Solo Codigo', desc: 'Texto, código y archivos.' },
+  { id: 'image', title: 'Imágenes', desc: 'Cada mensaje genera una imagen con DIAcorks.' },
+  { id: 'voice', title: 'Respuestas con voz', desc: 'DIAcorks responde y DIAcorks lo lee en voz alta.' },
 ];
 
 export default function Menu({
