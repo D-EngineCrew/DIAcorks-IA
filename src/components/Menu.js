@@ -11,10 +11,10 @@ import Avatar from './Avatar';
 const PANEL_W = 310;
 
 export const MODES = [
-  { id: 'auto', title: 'Automático', desc: 'La IA responde. Si pides una imagen, la dibuja Gemini.' },
-  { id: 'claude', title: 'Solo texto', desc: 'Texto, código y archivos.' },
-  { id: 'image', title: 'Imágenes', desc: 'Cada mensaje genera una imagen con Gemini.' },
-  { id: 'voice', title: 'Respuestas con voz', desc: 'La IA responde y Gemini lo lee en voz alta.' },
+  { id: 'auto', title: 'Automático', desc: 'DIAcorks Responde.' },
+  { id: 'code', title: 'Solo codigo', desc: 'Texto, código y archivos.' },
+  { id: 'image', title: 'Imágenes', desc: 'Aun em proceso de desarrollo.' },
+  { id: 'voice', title: 'Respuestas con voz', desc: 'Aun en proceso de desarrollo.' },
 ];
 
 export default function Menu({
@@ -136,7 +136,7 @@ export default function Menu({
         <TouchableOpacity style={styles.item} onPress={() => { onClose(); onOpenSettings(); }}>
           <Text style={styles.itemText}>⚙️  Configuración y memoria</Text>
         </TouchableOpacity>
-        <Text style={styles.version}>DIAcorks v1.1.0 · DF-PM Projects</Text>
+        <Text style={styles.version}>DIAcorks Aplha v1.0 · Dylan</Text>
       </Animated.View>
 
       <Pressable style={styles.overlay} onPress={onClose} />
